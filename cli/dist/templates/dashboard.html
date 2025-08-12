@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DVS Dashboard</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header>
+    <h1>🛡 DVS Security Dashboard</h1>
+    <span class="status" id="status">Disconnected</span>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Scan Results</h2>
+      <div id="results">
+        <p>No scan results yet. Run <code>dvs scan</code> in your terminal.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Developer Vulnerability Scanner — v1.0</p>
+  </footer>
+
+  <script>
+    const ws = new WebSocket(`ws://${location.host}`);
+    const statusEl = document.getElementById("status");
+    const resultsEl = document.getElementById("results");
+
+    ws.onopen = () => {
+      statusEl.textContent = "Connected";
+      statusEl.classList.add("ok");
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === "update") {
+          renderResults(data.results);
+        }
+      } catch (err) {
+        console.error("Failed to parse WS message", err);
+      }
+    };
+
+    ws.onclose = () => {
+      statusEl.textContent = "Disconnected";
+      statusEl.classList.remove("ok");
+    };
+
+    function renderResults(results) {
+      resultsEl.innerHTML = "";
+      for (const [type, vulns] of Object.entries(results)) {
+        const section = document.createElement("div");
+        section.className = "vuln-section";
+        section.innerHTML = `<h3>${type.toUpperCase()} (${vulns.length})</h3>`;
+        if (vulns.length === 0) {
+          section.innerHTML += "<p class='safe'>No vulnerabilities found ✅</p>";
+        } else {
+          const list = document.createElement("ul");
+          vulns.forEach(v => {
+            const li = document.createElement("li");
+            li.innerHTML = `
+              <strong>${v.file}</strong> — ${v.recommendation}
+              <br/><code>${v.pattern || ""}</code>
+            `;
+            list.appendChild(li);
+          });
+          section.appendChild(list);
+        }
+        resultsEl.appendChild(section);
+      }
+    }
+  </script>
+</body>
+</html>
