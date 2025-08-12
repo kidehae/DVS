@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    /* Basic Setup */
+    "target": "ES2022",               // Modern JavaScript features
+    "module": "NodeNext",             // CLI tools typically use CommonJS
+    "outDir": "./dist",               // Output directory
+    "rootDir": "./src",               // Source directory
+    "strict": true,                   // Enable all strict checks
+    "esModuleInterop": true,          // Better ESM/CJS compatibility
+    "skipLibCheck": true,             // Skip library checks (faster builds)
+
+    /* CLI-Specific Optimizations */
+    "moduleResolution": "NodeNext",   // For Node.js-style resolution
+    "resolveJsonModule": true,        // Allow importing JSON files
+    "sourceMap": true,                // Generate source maps for debugging
+    "declaration": true,              // Generate .d.ts files (if publishing to npm)
+
+    /* Linting/Code Quality */
+    "noUnusedLocals": true,           // Flag unused variables
+    "noImplicitReturns": true,        // Ensure functions always return
+    "forceConsistentCasingInFileNames": true  // Avoid filesystem case issues
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "**/*.test.ts"]
+}
