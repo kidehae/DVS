@@ -5,6 +5,7 @@ import fs from "fs";
 import { WebSocketServer } from "ws";
 import { runCodeScan } from "../scanners/code_scanner.js";
 import chalk from "chalk";
+import { loadProjectFiles } from "./load_files.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 export async function startDashboard(port) {
@@ -31,9 +32,16 @@ export async function startDashboard(port) {
     const wss = new WebSocketServer({ server });
     // When scanning finishes, broadcast results
     async function sendScanResults() {
+        const cwd = process.cwd(); // Directory where CLI was run
+        console.log(chalk.green(`🔍 Scanning: ${cwd}`));
+        const sourceFiles = await loadProjectFiles(cwd);
+        console.log(chalk.cyan(`📄 Found ${sourceFiles.length} files to scan:`));
+        sourceFiles.forEach(file => {
+            console.log(chalk.gray(` - ${file.path}`));
+        });
+        const scanResults = await runCodeScan(sourceFiles);
         const results = {
-            reflective: await runCodeScan(),
-            stored: [], // example placeholder
+            stored: scanResults.storedXSS,
             dom: []
         };
         wss.clients.forEach(client => {
@@ -48,9 +56,9 @@ export async function startDashboard(port) {
     });
     server.listen(actualPort, () => {
         const url = `http://localhost:${actualPort}`;
-        console.log(chalk.blue(`📊 Dashboard available at: ${url}`));
+        console.log(chalk.cyan(`Dashboard available at: ${url}`));
         try {
-            require("open")(url); // auto-open in browser
+            require("open")(url);
         }
         catch {
             console.log("Open the link in your browser.");
