@@ -44,21 +44,28 @@ const detectStoredXSS = (sourceFiles: SourceFile[]): Vulnerability[] => {
   // Storage Operations
   // -------------------------
   const storageOperations = [
+    // Database operations
     { re: /\b(?:db|database|client)\.(?:insert|update|save|create|upsert|replace)\s*\(/g, type: "database" },
     { re: /\bModel\.(?:create|update|findOneAndUpdate|updateOne|updateMany|insertMany|save)\s*\(/g, type: "orm" },
+
+    // Filesystem operations
     { re: /\bfs\.(?:writeFile|appendFile|createWriteStream|promises\.writeFile)\s*\(/g, type: "filesystem" },
+
+    // Browser storage
     { re: /\b(?:localStorage|sessionStorage)\.setItem\s*\(/g, type: "webstorage" },
     { re: /\bindexedDB\.(?:put|add)\s*\(/g, type: "indexeddb" },
     { re: /\bdocument\.cookie\s*=/g, type: "cookie" },
-    { re: /\bs3\.(?:putObject|upload)\s*\(/g, type: "cloudstorage" },
-    { re: /\bblobService\.(?:createBlockBlobFromText|createAppendBlobFromText)\s*\(/g, type: "cloudstorage" },
-    { re: /\bcache\.(?:set|put)\s*\(/g, type: "cache" },
-    { re: /\bredis\.(?:set|setex|hset)\s*\(/g, type: "cache" },
-    { re: /\b\w+\.push\s*\(/g, type: "array" },
-    { re: /\b\w+\.unshift\s*\(/g, type: "array" },
-    { re: /\b\w+\.splice\s*\(/g, type: "array" },
-    { re: /\b\w*\.?push\s*\(/g, type: "array" },
-    { re: /\b\w+\s*=\s*[^;]+;/g, type: "var_assign" },
+
+    // Cloud storage
+    { re: /\b(?:s3|blobService)\.(?:putObject|upload|createBlockBlobFromText|createAppendBlobFromText)\s*\(/g, type: "cloudstorage" },
+
+    // Caching systems
+    { re: /\b(?:cache|redis)\.(?:set|setex|hset|put)\s*\(/g, type: "cache" },
+
+    // Array operations (merged into one regex)
+    { re: /\b\w+\.(?:push|unshift|splice)\s*\(/g, type: "array" },
+
+    // Variable assignment (catch-all)
     { re: /\b\w+\s*=\s*[^;]+;/g, type: "var_assign" }
   ];
 
@@ -127,7 +134,7 @@ const detectStoredXSS = (sourceFiles: SourceFile[]): Vulnerability[] => {
 
     // Pass 2: sinks
     const sinks = file.isServerCode ? serverSinks : clientDomSinks;
-    for (const { re, desc, context } of sinks) {
+    for (const { re, context } of sinks) {
       for (const sinkMatch of content.matchAll(re)) {
         const sinkIdx = (sinkMatch as any).index ?? 0;
         const sinkLine = lineFromIndex(content, sinkIdx);
@@ -140,10 +147,10 @@ const detectStoredXSS = (sourceFiles: SourceFile[]): Vulnerability[] => {
                 type: "Stored XSS",
                 file: file.path,
                 line: sinkLine,
-                pattern: `Stored data from ${storage.type} (line ${storage.line}) in ${desc}`,
+                pattern: sinkMatch[0].trim(), // Now shows the exact vulnerable code
                 recommendation: context === "html"
-                  ? "Sanitize stored data before output using DOMPurify or similar."
-                  : "Properly encode/escape stored data for the context.",
+                    ? "Sanitize stored data before output using DOMPurify or similar."
+                    : "Properly encode/escape stored data for the context.",
                 severity: "high",
                 confidence: 0.9,
                 snippet: sinkMatch[0].slice(0, 200),
@@ -162,21 +169,21 @@ const detectStoredXSS = (sourceFiles: SourceFile[]): Vulnerability[] => {
         { re: /fs\.readFile\w*\s*\([\s\S]*?\)[\s\S]*?res\.(?:send|write)\s*\(/g, desc: "File read directly to output" },
         { re: /res\.(?:send|render|json)\([^)]*?\b\w+\.map\([^)]*?=>[^)]*?\$\{[^}]+?\}/g, desc: "Direct array map to template output" }
       ];
-      for (const { re, desc } of storageToOutputPatterns) {
+      for (const { re } of storageToOutputPatterns) {
         for (const match of content.matchAll(re)) {
           const idx = (match as any).index ?? 0;
           const slice = content.slice(Math.max(0, idx - 300), idx + match[0].length + 300);
           if (sliceHasSource(slice, allSources) && !isSanitizedForContext(slice, "html")) {
             vulns.push({
-              type: "Stored XSS (Direct Storage to Output)",
-              file: file.path,
-              line: lineFromIndex(content, idx),
-              pattern: desc,
-              recommendation: "Add sanitization between retrieval and output.",
-              severity: "critical",
-              confidence: 0.95,
-              snippet: match[0].slice(0, 200),
-              sanitized: false,
+                type: "Stored XSS (Direct Storage to Output)",
+                file: file.path,
+                line: lineFromIndex(content, idx),
+                pattern: match[0].trim(), // Now shows the actual vulnerable line
+                recommendation: "Add sanitization between retrieval and output.",
+                severity: "critical",
+                confidence: 0.95,
+                snippet: match[0].slice(0, 200),
+                sanitized: false,
             });
           }
         }
@@ -184,7 +191,17 @@ const detectStoredXSS = (sourceFiles: SourceFile[]): Vulnerability[] => {
     }
   }
 
-  return vulns;
+  // Remove duplicates based on file + line + pattern
+  const uniqueVulns = Array.from(
+    new Map(
+      vulns.map(v => [
+        `${v.file}:${v.line}:${v.pattern}`,
+        v
+      ])
+    ).values()
+  );
+
+  return uniqueVulns;
 };
 
 export default detectStoredXSS;

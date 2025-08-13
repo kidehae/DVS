@@ -6,11 +6,11 @@ export interface SourceFile {
   isTemplate?: boolean;
   isServerCode?: boolean;
   isClientCode?: boolean;
-  language?: string;       // e.g., "js", "ts", "html"
-  framework?: string;      // e.g., "react", "express"
-  dependencies?: string[]; // npm packages used
+  language?: string; 
+  framework?: string;
+  dependencies?: string[];
   lastModified?: Date;
-  size?: number;           // bytes or line count
+  size?: number;
 }
 
 export interface SinkDefinition {
