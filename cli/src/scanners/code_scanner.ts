@@ -1,4 +1,11 @@
-export async function runCodeScan() {
+import detectStoredXSS from "./xss/stored.js";
+import { ScanResult, SourceFile } from "../utils/types.js";
+
+export const runCodeScan = (sourceFiles: SourceFile[]): ScanResult => {
   console.log("🔍 Running code scanner...");
-  // Your reflective/stored/DOM XSS scanning logic goes here
+  const storedXSSResults = detectStoredXSS(sourceFiles);
+
+  return {
+    storedXSS: storedXSSResults,
+  }
 }
