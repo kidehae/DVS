@@ -1,3 +1,4 @@
+import detectReflectiveXSS from "../scanners/xss/reflective.js";
 import detectStoredXSS from "../scanners/xss/stored.js";
 
 export interface SourceFile {
@@ -6,17 +7,17 @@ export interface SourceFile {
   isTemplate?: boolean;
   isServerCode?: boolean;
   isClientCode?: boolean;
-  language?: string;       // e.g., "js", "ts", "html"
-  framework?: string;      // e.g., "react", "express"
+  language?: string; // e.g., "js", "ts", "html"
+  framework?: string; // e.g., "react", "express"
   dependencies?: string[]; // npm packages used
   lastModified?: Date;
-  size?: number;           // bytes or line count
+  size?: number; // bytes or line count
 }
 
 export interface SinkDefinition {
   re: RegExp;
   desc: string;
-  context: "html" | "url" | "header" | "json" | "attr";
+  context: "html" | "url" | "header" | "json" | "attr" | "css";
 }
 
 export interface Vulnerability {
@@ -32,5 +33,6 @@ export interface Vulnerability {
 }
 
 export interface ScanResult {
-  storedXSS: ReturnType<typeof detectStoredXSS>,
+  reflectiveXSS: ReturnType<typeof detectReflectiveXSS>;
+  storedXSS: ReturnType<typeof detectStoredXSS>;
 }
