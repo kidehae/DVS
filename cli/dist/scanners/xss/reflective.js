@@ -110,20 +110,19 @@ const detectReflectiveXSS = (sourceFiles) => {
     const urlSanitizers = [/encodeURIComponent\s*\(/g, /encodeURI\s*\(/g];
     // CSS sanitizers / defensive APIs
     const cssSanitizers = [
-        /cssesc\s*\(/g, // https://github.com/mathiasbynens/cssesc
-        /sanitizeCss\s*\(/g, // project-specific sanitizer
-        /safeStyle\s*\(/g, // project-specific sanitizer
-        /styleSafe\s*\(/g, // project-specific sanitizer
-        /isSafeCss\s*\(/g, // project-specific validator
-        // common strict whitelist patterns for colors and simple tokens
-        /\/\^#[0-9a-fA-F]{3,6}\$\/g?/g, // /^#[0-9a-fA-F]{3,6}$/[g]
-        /\/\^[a-zA-Z0-9# ,.%()\-]+\$\//g, // /^[a-zA-Z0-9# ,.%()-]+$/
+        /cssesc\s*\(/g,
+        /sanitizeCss\s*\(/g,
+        /safeStyle\s*\(/g,
+        /styleSafe\s*\(/g,
+        /isSafeCss\s*\(/g,
+        /\/\^#[0-9a-fA-F]{3,6}\$\/g?/g,
+        /\/\^[a-zA-Z0-9# ,.%()\-]+\$\//g,
     ];
-    // CSS "dangerous" constructs (if present together with user input, treat as high risk)
+    // CSS "dangerous" constructs
     const cssDangerous = [
-        /expression\s*\(/gi, // old IE
-        /behavior\s*:\s*url\s*\(/gi, // old IE .htc behaviors
-        /url\s*\(\s*['"]?\s*javascript\s*:/gi, // url(javascript:...)
+        /expression\s*\(/gi,
+        /behavior\s*:\s*url\s*\(/gi,
+        /url\s*\(\s*['"]?\s*javascript\s*:/gi,
     ];
     // -------------------------
     // Utils
@@ -138,31 +137,25 @@ const detectReflectiveXSS = (sourceFiles) => {
             return sliceHasAny(slice, htmlSanitizers);
         if (context === "css")
             return sliceHasAny(slice, cssSanitizers);
-        // headers/json: assume unsafe unless proven otherwise; JSON is safe if not embedded into HTML
         return false;
     };
     // -------------------------
     // 4) Template checks (server-rendered)
     // -------------------------
     const templateUnescaped = [
-        // PHP short echo (unescaped)
         {
             re: /<\?=\s*([^?]+)\s*\?>/g,
             rec: "Use <?= htmlspecialchars(...) ?> or escape output.",
         },
-        // Handlebars/Mustache triple braces (unescaped)
         {
             re: /\{\{\{\s*([^}]+)\s*\}\}\}/g,
             rec: "Use {{ var }} (escaped) instead of triple braces in Handlebars.",
         },
-        // EJS raw output
         {
             re: /<%-\s*([^%]+)\s*%>/g,
             rec: "Use <%= %> (escaped) instead of <%- %> in EJS.",
         },
-        // Pug unescaped
         { re: /!=\s*\w+/g, rec: "Use #{var} (escaped) instead of != var in Pug." },
-        // (Optional) template inline style injections
         {
             re: /style\s*=\s*["'`][\s\S]*?(?:\+|\$\{)[\s\S]*?["'`]/gi,
             rec: "Avoid dynamic style attributes or sanitize CSS tokens.",
@@ -181,6 +174,10 @@ const detectReflectiveXSS = (sourceFiles) => {
                         line: lineFromIndex(content, idx),
                         pattern: m[0],
                         recommendation: rec,
+                        severity: "high",
+                        confidence: 0.9,
+                        snippet: content.slice(Math.max(0, idx - 50), idx + 50),
+                        sanitized: false,
                     });
                 }
             }
@@ -190,44 +187,51 @@ const detectReflectiveXSS = (sourceFiles) => {
             for (const { re, desc, context } of serverSinks) {
                 for (const m of content.matchAll(re)) {
                     const idx = m.index ?? 0;
-                    // Look around the match to catch nearby variable assembly
                     const sliceStart = Math.max(0, idx - 300);
                     const sliceEnd = Math.min(content.length, idx + m[0].length + 300);
                     const slice = content.slice(sliceStart, sliceEnd);
                     const hasSource = sliceHasSource(slice, serverSources);
                     const sanitized = isSanitizedForContext(slice, context);
-                    // For CSS, also consider "dangerous" functions as a risk amplifier
                     const cssDanger = context === "css" ? sliceHasAny(slice, cssDangerous) : false;
                     if (hasSource && (!sanitized || cssDanger)) {
                         let recommendation = "";
-                        if (context === "url") {
-                            recommendation =
-                                "Validate redirect/URL targets (allow-list) and encode parameters with encodeURIComponent().";
-                        }
-                        else if (context === "css") {
-                            recommendation =
-                                "Never inject raw user input into CSS. Restrict to a safe allow-list (e.g., /^#[0-9a-f]{3,6}$/i for colors), or sanitize tokens (cssesc). Disallow url(javascript:), expression(), and external URLs.";
-                        }
-                        else if (context === "json") {
-                            recommendation =
-                                "Ensure response is application/json and not embedded in HTML. Avoid reflecting untrusted JSON inside <script> without escaping.";
-                        }
-                        else {
-                            recommendation =
-                                "Escape/encode untrusted data before sending HTML (e.g., escapeHtml/validator.escape) or ensure the template auto-escapes.";
+                        let vulnerabilityType = "";
+                        let severity = "high";
+                        switch (context) {
+                            case "url":
+                                recommendation =
+                                    "Validate redirect/URL targets (allow-list) and encode parameters with encodeURIComponent().";
+                                vulnerabilityType = "Open Redirect / URL Injection";
+                                severity = "medium";
+                                break;
+                            case "css":
+                                recommendation =
+                                    "Never inject raw user input into CSS. Restrict to a safe allow-list (e.g., /^#[0-9a-f]{3,6}$/i for colors), or sanitize tokens (cssesc). Disallow url(javascript:), expression(), and external URLs.";
+                                vulnerabilityType = "Reflective CSS Injection";
+                                severity = cssDanger ? "critical" : "high";
+                                break;
+                            case "json":
+                                recommendation =
+                                    "Ensure response is application/json and not embedded in HTML. Avoid reflecting untrusted JSON inside <script> without escaping.";
+                                vulnerabilityType = "Reflected JSON (check embedding)";
+                                severity = "medium";
+                                break;
+                            default:
+                                recommendation =
+                                    "Escape/encode untrusted data before sending HTML (e.g., escapeHtml/validator.escape) or ensure the template auto-escapes.";
+                                vulnerabilityType = "Reflective XSS (Server)";
+                                severity = "high";
                         }
                         vulns.push({
-                            type: context === "css"
-                                ? "Reflective CSS Injection"
-                                : context === "url"
-                                    ? "Open Redirect / URL Injection"
-                                    : context === "json"
-                                        ? "Reflected JSON (check embedding)"
-                                        : "Reflective XSS (Server)",
+                            type: vulnerabilityType,
                             file: file.path,
                             line: lineFromIndex(content, idx),
                             pattern: `${desc}: ${m[0].slice(0, 200)}${m[0].length > 200 ? "..." : ""}`,
                             recommendation,
+                            severity,
+                            confidence: sanitized ? 0.6 : 0.9,
+                            snippet: content.slice(Math.max(0, idx - 100), idx + 100),
+                            sanitized,
                         });
                     }
                 }

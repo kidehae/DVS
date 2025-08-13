@@ -1,5 +1,5 @@
 import http from "http";
-import { fileURLToPath } from 'url';
+import { fileURLToPath } from "url";
 import { dirname, join, extname } from "path";
 import fs from "fs";
 import { WebSocketServer } from "ws";
@@ -12,7 +12,7 @@ const __dirname = dirname(__filename);
 
 export async function startDashboard(port?: number) {
   // Pick a port automatically if not given
-  const actualPort = port || await findAvailablePort(5713);
+  const actualPort = port || (await findAvailablePort(5713));
 
   const server = http.createServer((req, res) => {
     let filePath = "";
@@ -41,19 +41,20 @@ export async function startDashboard(port?: number) {
 
     const sourceFiles = await loadProjectFiles(cwd);
 
- console.log(chalk.cyan(`📄 Found ${sourceFiles.length} files to scan:`));
-  sourceFiles.forEach(file => {
-    console.log(chalk.gray(` - ${file.path}`));
-  });
+    console.log(chalk.cyan(`📄 Found ${sourceFiles.length} files to scan:`));
+    sourceFiles.forEach((file) => {
+      console.log(chalk.gray(` - ${file.path}`));
+    });
 
     const scanResults = await runCodeScan(sourceFiles);
 
     const results = {
+      reflective: scanResults.reflectiveXSS,
       stored: scanResults.storedXSS,
-      dom: []
+      dom: [],
     };
 
-    wss.clients.forEach(client => {
+    wss.clients.forEach((client) => {
       if (client.readyState === client.OPEN) {
         client.send(JSON.stringify({ type: "update", results }));
       }
@@ -80,9 +81,12 @@ async function findAvailablePort(startPort: number): Promise<number> {
   const net = await import("net");
   function checkPort(port: number) {
     return new Promise<boolean>((resolve) => {
-      const tester = net.createServer()
+      const tester = net
+        .createServer()
         .once("error", () => resolve(false))
-        .once("listening", () => tester.once("close", () => resolve(true)).close())
+        .once("listening", () =>
+          tester.once("close", () => resolve(true)).close()
+        )
         .listen(port);
     });
   }
