@@ -1,6 +1,7 @@
 .env
 cli/node_modules
 cli/package-lock.json
+cli/dist
 client/node_modules
 client/package-lock.json
 server/node_modules
