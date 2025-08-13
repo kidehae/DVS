@@ -48,9 +48,9 @@ export async function startDashboard(port) {
     });
     server.listen(actualPort, () => {
         const url = `http://localhost:${actualPort}`;
-        console.log(chalk.blue(`📊 Dashboard available at: ${url}`));
+        console.log(chalk.blue(`Dashboard available at: ${url}`));
         try {
-            require("open")(url); // auto-open in browser
+            require("open")(url);
         }
         catch {
             console.log("Open the link in your browser.");
