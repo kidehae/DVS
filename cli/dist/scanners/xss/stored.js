@@ -38,37 +38,23 @@ const detectStoredXSS = (sourceFiles) => {
     // Storage Operations
     // -------------------------
     const storageOperations = [
-        {
-            re: /\b(?:db|database|client)\.(?:insert|update|save|create|upsert|replace)\s*\(/g,
-            type: "database",
-        },
-        {
-            re: /\bModel\.(?:create|update|findOneAndUpdate|updateOne|updateMany|insertMany|save)\s*\(/g,
-            type: "orm",
-        },
-        {
-            re: /\bfs\.(?:writeFile|appendFile|createWriteStream|promises\.writeFile)\s*\(/g,
-            type: "filesystem",
-        },
-        {
-            re: /\b(?:localStorage|sessionStorage)\.setItem\s*\(/g,
-            type: "webstorage",
-        },
+        // Database operations
+        { re: /\b(?:db|database|client)\.(?:insert|update|save|create|upsert|replace)\s*\(/g, type: "database" },
+        { re: /\bModel\.(?:create|update|findOneAndUpdate|updateOne|updateMany|insertMany|save)\s*\(/g, type: "orm" },
+        // Filesystem operations
+        { re: /\bfs\.(?:writeFile|appendFile|createWriteStream|promises\.writeFile)\s*\(/g, type: "filesystem" },
+        // Browser storage
+        { re: /\b(?:localStorage|sessionStorage)\.setItem\s*\(/g, type: "webstorage" },
         { re: /\bindexedDB\.(?:put|add)\s*\(/g, type: "indexeddb" },
         { re: /\bdocument\.cookie\s*=/g, type: "cookie" },
-        { re: /\bs3\.(?:putObject|upload)\s*\(/g, type: "cloudstorage" },
-        {
-            re: /\bblobService\.(?:createBlockBlobFromText|createAppendBlobFromText)\s*\(/g,
-            type: "cloudstorage",
-        },
-        { re: /\bcache\.(?:set|put)\s*\(/g, type: "cache" },
-        { re: /\bredis\.(?:set|setex|hset)\s*\(/g, type: "cache" },
-        { re: /\b\w+\.push\s*\(/g, type: "array" },
-        { re: /\b\w+\.unshift\s*\(/g, type: "array" },
-        { re: /\b\w+\.splice\s*\(/g, type: "array" },
-        { re: /\b\w*\.?push\s*\(/g, type: "array" },
-        { re: /\b\w+\s*=\s*[^;]+;/g, type: "var_assign" },
-        { re: /\b\w+\s*=\s*[^;]+;/g, type: "var_assign" },
+        // Cloud storage
+        { re: /\b(?:s3|blobService)\.(?:putObject|upload|createBlockBlobFromText|createAppendBlobFromText)\s*\(/g, type: "cloudstorage" },
+        // Caching systems
+        { re: /\b(?:cache|redis)\.(?:set|setex|hset|put)\s*\(/g, type: "cache" },
+        // Array operations (merged into one regex)
+        { re: /\b\w+\.(?:push|unshift|splice)\s*\(/g, type: "array" },
+        // Variable assignment (catch-all)
+        { re: /\b\w+\s*=\s*[^;]+;/g, type: "var_assign" }
     ];
     // -------------------------
     // Output Sinks (extended)
@@ -169,7 +155,7 @@ const detectStoredXSS = (sourceFiles) => {
         }
         // Pass 2: sinks
         const sinks = file.isServerCode ? serverSinks : clientDomSinks;
-        for (const { re, desc, context } of sinks) {
+        for (const { re, context } of sinks) {
             for (const sinkMatch of content.matchAll(re)) {
                 const sinkIdx = sinkMatch.index ?? 0;
                 const sinkLine = lineFromIndex(content, sinkIdx);
@@ -182,7 +168,7 @@ const detectStoredXSS = (sourceFiles) => {
                                 type: "Stored XSS",
                                 file: file.path,
                                 line: sinkLine,
-                                pattern: `Stored data from ${storage.type} (line ${storage.line}) in ${desc}`,
+                                pattern: sinkMatch[0].trim(), // Now shows the exact vulnerable code
                                 recommendation: context === "html"
                                     ? "Sanitize stored data before output using DOMPurify or similar."
                                     : "Properly encode/escape stored data for the context.",
@@ -212,7 +198,7 @@ const detectStoredXSS = (sourceFiles) => {
                     desc: "Direct array map to template output",
                 },
             ];
-            for (const { re, desc } of storageToOutputPatterns) {
+            for (const { re } of storageToOutputPatterns) {
                 for (const match of content.matchAll(re)) {
                     const idx = match.index ?? 0;
                     const slice = content.slice(Math.max(0, idx - 300), idx + match[0].length + 300);
@@ -222,7 +208,7 @@ const detectStoredXSS = (sourceFiles) => {
                             type: "Stored XSS (Direct Storage to Output)",
                             file: file.path,
                             line: lineFromIndex(content, idx),
-                            pattern: desc,
+                            pattern: match[0].trim(), // Now shows the actual vulnerable line
                             recommendation: "Add sanitization between retrieval and output.",
                             severity: "critical",
                             confidence: 0.95,
@@ -234,7 +220,12 @@ const detectStoredXSS = (sourceFiles) => {
             }
         }
     }
-    return vulns;
+    // Remove duplicates based on file + line + pattern
+    const uniqueVulns = Array.from(new Map(vulns.map(v => [
+        `${v.file}:${v.line}:${v.pattern}`,
+        v
+    ])).values());
+    return uniqueVulns;
 };
 export default detectStoredXSS;
 //# sourceMappingURL=stored.js.map
