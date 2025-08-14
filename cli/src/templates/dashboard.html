@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>DVS Dashboard</title>
   <link rel="stylesheet" href="./styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
 </head>
 <body>
   <header>
@@ -26,7 +27,25 @@
   </footer>
 
   <script>
-    const ws = new WebSocket(`ws://${location.host}`);
+    const MAX_LEN = 4000;
+
+    function safeText(value) {
+      if (value === null || value === undefined) return "";
+      const str = String(value);
+      return str.length > MAX_LEN ? str.slice(0, MAX_LEN) + "…" : str;
+    }
+
+    function safePlain(value) {
+      return safeText(DOMPurify.sanitize(String(value ?? ""), { ALLOWED_TAGS: [], ALLOWED_ATTR: [] }));
+    }
+
+    function clearEl(el) {
+      while (el.firstChild) el.removeChild(el.firstChild);
+    }
+
+    const wsScheme = location.protocol === "https:" ? "wss" : "ws";
+    const ws = new WebSocket(`${wsScheme}://${location.host}`);
+
     const statusEl = document.getElementById("status");
     const resultsEl = document.getElementById("results");
 
@@ -35,42 +54,87 @@
       statusEl.classList.add("ok");
     };
 
+    ws.onclose = () => {
+      statusEl.textContent = "Disconnected";
+      statusEl.classList.remove("ok");
+    };
+
     ws.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data);
-        if (data.type === "update") {
-          renderResults(data.results);
+        if (typeof event.data !== "string" || event.data.length > 2_000_000) return;
+
+        const msg = JSON.parse(event.data);
+
+        if (msg.type === "reload") {
+          location.reload();
+          return; // stop here for reload messages
+        }
+
+        if (msg.type === "update" && typeof msg.results === "object" && msg.results !== null) {
+          renderResults(msg.results);
         }
       } catch (err) {
         console.error("Failed to parse WS message", err);
       }
     };
 
-    ws.onclose = () => {
-      statusEl.textContent = "Disconnected";
-      statusEl.classList.remove("ok");
-    };
-
     function renderResults(results) {
-      resultsEl.innerHTML = "";
+      clearEl(resultsEl);
+
       for (const [type, vulns] of Object.entries(results)) {
+        if (!Array.isArray(vulns)) continue;
+
         const section = document.createElement("div");
         section.className = "vuln-section";
-        section.innerHTML = `<h3>${type.toUpperCase()} (${vulns.length})</h3>`;
+
+        const h3 = document.createElement("h3");
+        h3.textContent = `${safeText(type.toUpperCase())} (${vulns.length})`;
+        section.appendChild(h3);
+
         if (vulns.length === 0) {
-          section.innerHTML += "<p class='safe'>No vulnerabilities found ✅</p>";
+          const p = document.createElement("p");
+          p.className = "safe";
+          p.textContent = "No vulnerabilities found ✅";
+          section.appendChild(p);
         } else {
-          const list = document.createElement("ul");
+          const table = document.createElement("table");
+          table.className = "vuln-table";
+
+          const headerRow = document.createElement("tr");
+          ["File", "Line", "Pattern", "Recommendation", "Severity", "Confidence", "Snippet", "Sanitized"]
+            .forEach(col => {
+              const th = document.createElement("th");
+              th.textContent = col;
+              headerRow.appendChild(th);
+            });
+          table.appendChild(headerRow);
+
           vulns.forEach(v => {
-            const li = document.createElement("li");
-            li.innerHTML = `
-              <strong>${v.file}</strong> — ${v.recommendation}
-              <br/><code>${v.pattern || ""}</code>
-            `;
-            list.appendChild(li);
+            const tr = document.createElement("tr");
+
+            const cells = [
+              safeText(v.file),
+              safeText(v.line ?? ""),
+              safeText(v.pattern),
+              safeText(v.recommendation),
+              safeText(v.severity),
+              safeText(v.confidence),
+              safeText(v.snippet ?? ""),
+              safeText(v.sanitized ?? "")
+            ];
+
+            cells.forEach(val => {
+              const td = document.createElement("td");
+              td.textContent = val;
+              tr.appendChild(td);
+            });
+
+            table.appendChild(tr);
           });
-          section.appendChild(list);
+
+          section.appendChild(table);
         }
+
         resultsEl.appendChild(section);
       }
     }

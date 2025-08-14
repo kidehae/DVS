@@ -3,9 +3,10 @@ import { fileURLToPath } from "url";
 import { dirname, join, extname } from "path";
 import fs from "fs";
 import { WebSocketServer } from "ws";
-import { runCodeScan } from "../scanners/code_scanner.js";
 import chalk from "chalk";
+import chokidar from 'chokidar';
 import { loadProjectFiles } from "./load_files.js";
+import { runCodeScan } from "../scanners/code_scanner.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -13,6 +14,7 @@ const __dirname = dirname(__filename);
 export async function startDashboard(port?: number) {
   // Pick a port automatically if not given
   const actualPort = port || (await findAvailablePort(5713));
+  const cwd = process.cwd();
 
   const server = http.createServer((req, res) => {
     let filePath = "";
@@ -36,7 +38,6 @@ export async function startDashboard(port?: number) {
 
   // When scanning finishes, broadcast results
   async function sendScanResults() {
-    const cwd = process.cwd(); // Directory where CLI was run
     console.log(chalk.green(`🔍 Scanning: ${cwd}`));
 
     const sourceFiles = await loadProjectFiles(cwd);
@@ -66,11 +67,29 @@ export async function startDashboard(port?: number) {
     sendScanResults();
   });
 
-  server.listen(actualPort, () => {
+  const watcher = chokidar.watch(cwd, {
+    ignored: /node_modules|\.git|dist|build/,
+    ignoreInitial: true,
+    persistent: true,
+  });
+
+  let scanTimeout: NodeJS.Timeout | undefined;
+  watcher.on("all", (event, pathChanged) => {
+    if (/\.(js|ts|jsx|tsx|html)$/i.test(pathChanged)) {
+      console.log(chalk.yellow(`📂 File changed: ${pathChanged} → rescanning...`));
+      clearTimeout(scanTimeout);
+      scanTimeout = setTimeout(() => {
+        sendScanResults();
+      }, 500);
+    }
+  })
+
+  server.listen(actualPort, async () => {
     const url = `http://localhost:${actualPort}`;
     console.log(chalk.cyan(`Dashboard available at: ${url}`));
     try {
-      require("open")(url);
+      const open = (await import('open')).default;
+      await open(url);
     } catch {
       console.log("Open the link in your browser.");
     }
