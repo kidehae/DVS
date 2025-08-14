@@ -62,9 +62,16 @@
     ws.onmessage = (event) => {
       try {
         if (typeof event.data !== "string" || event.data.length > 2_000_000) return;
-        const data = JSON.parse(event.data);
-        if (data.type === "update" && typeof data.results === "object" && data.results !== null) {
-          renderResults(data.results);
+
+        const msg = JSON.parse(event.data);
+
+        if (msg.type === "reload") {
+          location.reload();
+          return; // stop here for reload messages
+        }
+
+        if (msg.type === "update" && typeof msg.results === "object" && msg.results !== null) {
+          renderResults(msg.results);
         }
       } catch (err) {
         console.error("Failed to parse WS message", err);

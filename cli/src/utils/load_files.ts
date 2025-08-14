@@ -12,8 +12,11 @@ export async function loadProjectFiles(dir: string): Promise<SourceFile[]> {
       const fullPath = path.join(currentPath, entry.name);
 
       if (entry.isDirectory()) {
-        // Skip node_modules folder entirely
-        if (entry.name === "node_modules") continue;
+        if (entry.name === "node_modules" ||
+            entry.name === "dist" ||
+            entry.name === "build" ||
+            entry.name === ".git"
+        ) continue;
 
         await walk(fullPath);
       } 
