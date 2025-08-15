@@ -4,7 +4,7 @@ import { dirname, join, extname } from "path";
 import fs from "fs";
 import { WebSocketServer } from "ws";
 import chalk from "chalk";
-import chokidar from 'chokidar';
+import chokidar from "chokidar";
 import { loadProjectFiles } from "./load_files.js";
 import { runCodeScan } from "../scanners/code_scanner.js";
 
@@ -52,7 +52,7 @@ export async function startDashboard(port?: number) {
     const results = {
       reflective: scanResults.reflectiveXSS,
       stored: scanResults.storedXSS,
-      dom: [],
+      dom: scanResults.domXSS,
     };
 
     wss.clients.forEach((client) => {
@@ -76,19 +76,21 @@ export async function startDashboard(port?: number) {
   let scanTimeout: NodeJS.Timeout | undefined;
   watcher.on("all", (event, pathChanged) => {
     if (/\.(js|ts|jsx|tsx|html)$/i.test(pathChanged)) {
-      console.log(chalk.yellow(`📂 File changed: ${pathChanged} → rescanning...`));
+      console.log(
+        chalk.yellow(`📂 File changed: ${pathChanged} → rescanning...`)
+      );
       clearTimeout(scanTimeout);
       scanTimeout = setTimeout(() => {
         sendScanResults();
       }, 500);
     }
-  })
+  });
 
   server.listen(actualPort, async () => {
     const url = `http://localhost:${actualPort}`;
     console.log(chalk.cyan(`Dashboard available at: ${url}`));
     try {
-      const open = (await import('open')).default;
+      const open = (await import("open")).default;
       await open(url);
     } catch {
       console.log("Open the link in your browser.");

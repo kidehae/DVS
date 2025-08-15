@@ -742,7 +742,7 @@ const detectReflectiveXSS = (sourceFiles: SourceFile[]): Vulnerability[] => {
 
   const isSanitizedForContext = (
     slice: string,
-    context: "html" | "url" | "header" | "json" | "css" | "attr"
+    context: "html" | "url" | "header" | "json" | "css" | "attr" | "js"
   ) => {
     if (context === "url") return sliceHasAny(slice, urlSanitizers);
     if (context === "html") return sliceHasAny(slice, htmlSanitizers);
