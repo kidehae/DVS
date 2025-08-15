@@ -3,6 +3,7 @@ import {
   SourceFile,
   Vulnerability,
 } from "../../utils/types.js";
+import { calculateConfidence } from "../../utils/confidence_calculator.js";
 
 // -------------------------
 // 2) Detection Function
@@ -147,14 +148,13 @@ const detectStoredXSS = (sourceFiles: SourceFile[]): Vulnerability[] => {
     },
   ];
 
-  // -------------------------
-  // Sanitizers
-  // -------------------------
+
   const htmlSanitizers = [
-    /escapeHtml\s*\(/g,
-    /DOMPurify\.sanitize\s*\(/g,
-    /\.textContent\s*=/g,
+    /(?:DOMPurify|escapeHtml|sanitizeHtml|he\.escape)\s*\(/g,
+    /\.text(?:Content|Context)\s*=/g,
     /createTextNode\s*\(/g,
+    /<%-?[^=](?!.*%>)/g,
+    /#\{.*?\}/g,
   ];
   const urlSanitizers = [/encodeURIComponent\s*\(/g, /encodeURI\s*\(/g];
 
@@ -206,7 +206,7 @@ const detectStoredXSS = (sourceFiles: SourceFile[]): Vulnerability[] => {
 
     // Pass 2: sinks
     const sinks = file.isServerCode ? serverSinks : clientDomSinks;
-    for (const { re, context } of sinks) {
+    for (const { re, desc, context } of sinks) {
       for (const sinkMatch of content.matchAll(re)) {
         const sinkIdx = (sinkMatch as any).index ?? 0;
         const sinkLine = lineFromIndex(content, sinkIdx);
@@ -222,13 +222,13 @@ const detectStoredXSS = (sourceFiles: SourceFile[]): Vulnerability[] => {
                 type: "Stored XSS",
                 file: file.path,
                 line: sinkLine,
-                pattern: sinkMatch[0].trim(), // Now shows the exact vulnerable code
+                pattern: desc,
                 recommendation:
                   context === "html"
                     ? "Sanitize stored data before output using DOMPurify or similar."
                     : "Properly encode/escape stored data for the context.",
                 severity: "high",
-                confidence: 0.9,
+                confidence: calculateConfidence({ snippet: sinkMatch[0] }),
                 snippet: sinkMatch[0].slice(0, 200),
                 sanitized: sanitized,
               });
@@ -254,7 +254,7 @@ const detectStoredXSS = (sourceFiles: SourceFile[]): Vulnerability[] => {
           desc: "Direct array map to template output",
         },
       ];
-      for (const { re } of storageToOutputPatterns) {
+      for (const { re, desc } of storageToOutputPatterns) {
         for (const match of content.matchAll(re)) {
           const idx = (match as any).index ?? 0;
           const slice = content.slice(
@@ -269,10 +269,10 @@ const detectStoredXSS = (sourceFiles: SourceFile[]): Vulnerability[] => {
               type: "Stored XSS (Direct Storage to Output)",
               file: file.path,
               line: lineFromIndex(content, idx),
-              pattern: match[0].trim(), // Now shows the actual vulnerable line
+              pattern: desc,
               recommendation: "Add sanitization between retrieval and output.",
               severity: "critical",
-              confidence: 0.95,
+              confidence: calculateConfidence({ snippet: match[0] }),
               snippet: match[0].slice(0, 200),
               sanitized: false,
             });

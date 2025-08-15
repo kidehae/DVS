@@ -8,6 +8,7 @@ export const runCodeScan = (sourceFiles: SourceFile[]): ScanResult => {
   const reflectiveXSSResults = detectReflectiveXSS(sourceFiles);
   const storedXSSResults = detectStoredXSS(sourceFiles);
   const domXSSResults = detectDOMXSS(sourceFiles);
+  
   return {
     reflectiveXSS: reflectiveXSSResults,
     storedXSS: storedXSSResults,
