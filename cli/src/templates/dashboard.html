@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>DVS Dashboard</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap">
   <link rel="stylesheet" href="./styles.css" />
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
 </head>
@@ -14,7 +15,7 @@
   </header>
 
   <main>
-    <section class="card">
+    <section>
       <h2>Scan Results</h2>
       <div id="results">
         <p>No scan results yet. Run <code>dvs scan</code> in your terminal.</p>
@@ -67,7 +68,7 @@
 
         if (msg.type === "reload") {
           location.reload();
-          return; // stop here for reload messages
+          return;
         }
 
         if (msg.type === "update" && typeof msg.results === "object" && msg.results !== null) {
@@ -82,59 +83,68 @@
       clearEl(resultsEl);
 
       for (const [type, vulns] of Object.entries(results)) {
-        if (!Array.isArray(vulns)) continue;
-
         const section = document.createElement("div");
         section.className = "vuln-section";
 
         const h3 = document.createElement("h3");
+        h3.className = "collapsible";
         h3.textContent = `${safeText(type.toUpperCase())} (${vulns.length})`;
+        h3.addEventListener("click", () => {
+          h3.classList.toggle("active");
+          contentEl.classList.toggle("open");
+        });
+
         section.appendChild(h3);
 
-        if (vulns.length === 0) {
+        const contentEl = document.createElement("div");
+        contentEl.className = "collapsible-content";
+
+        if (!Array.isArray(vulns) || vulns.length === 0) {
           const p = document.createElement("p");
           p.className = "safe";
           p.textContent = "No vulnerabilities found ✅";
-          section.appendChild(p);
+          contentEl.appendChild(p);
         } else {
-          const table = document.createElement("table");
-          table.className = "vuln-table";
-
-          const headerRow = document.createElement("tr");
-          ["File", "Line", "Pattern", "Recommendation", "Severity", "Confidence", "Snippet", "Sanitized"]
-            .forEach(col => {
-              const th = document.createElement("th");
-              th.textContent = col;
-              headerRow.appendChild(th);
-            });
-          table.appendChild(headerRow);
-
           vulns.forEach(v => {
-            const tr = document.createElement("tr");
+            const card = document.createElement("div");
+            card.className = "vuln-card";
 
-            const cells = [
-              safeText(v.file),
-              safeText(v.line ?? ""),
-              safeText(v.pattern),
-              safeText(v.recommendation),
-              safeText(v.severity),
-              safeText(v.confidence),
-              safeText(v.snippet ?? ""),
-              safeText(v.sanitized ?? "")
+            const header = document.createElement("div");
+            header.className = "vuln-header";
+
+            const typeEl = document.createElement("div");
+            typeEl.className = "vuln-type";
+            typeEl.textContent = safeText(v.pattern);
+
+            const severityEl = document.createElement("div");
+            severityEl.className = "vuln-severity severity-" + (v.severity || "low").toLowerCase();
+            severityEl.textContent = safeText(v.severity);
+
+            header.appendChild(typeEl);
+            header.appendChild(severityEl);
+            card.appendChild(header);
+
+            const details = [
+              ["File", v.file],
+              ["Line", v.line],
+              ["Recommendation", v.recommendation],
+              ["Confidence", v.confidence],
+              ["Snippet", v.snippet],
+              ["Sanitized", v.sanitized]
             ];
 
-            cells.forEach(val => {
-              const td = document.createElement("td");
-              td.textContent = val;
-              tr.appendChild(td);
+            details.forEach(([label, val]) => {
+              const detail = document.createElement("div");
+              detail.className = "vuln-detail";
+              detail.innerHTML = `<strong>${label}:</strong> ${safeText(val)}`;
+              card.appendChild(detail);
             });
 
-            table.appendChild(tr);
+            contentEl.appendChild(card);
           });
-
-          section.appendChild(table);
         }
 
+        section.appendChild(contentEl);
         resultsEl.appendChild(section);
       }
     }

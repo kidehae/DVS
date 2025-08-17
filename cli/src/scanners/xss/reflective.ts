@@ -846,9 +846,7 @@ const detectReflectiveXSS = (sourceFiles: SourceFile[]): Vulnerability[] => {
               type: vulnerabilityType,
               file: file.path,
               line: lineFromIndex(content, idx),
-              pattern: `${desc}: ${m[0].slice(0, 200)}${
-                m[0].length > 200 ? "..." : ""
-              }`,
+              pattern: desc,
               recommendation,
               severity,
               confidence: sanitized ? 0.6 : 0.9,
